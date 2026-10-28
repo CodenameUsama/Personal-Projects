@@ -9,6 +9,8 @@ const int switchPin = 14;
 int lastDuty = 255;
 bool previousSwitchState = LOW;
 bool previousReedState = LOW;
+unsigned long lightOnTime;
+bool timedOut;
 
 void setup()
 {
@@ -18,8 +20,8 @@ void setup()
   pinMode(reedPin, INPUT_PULLDOWN);
   pinMode(switchPin, INPUT_PULLDOWN);
   
-  //PWM setup (5000hz to avoid flickering)
-  ledcSetup(0, 5000, 8);
+  //PWM setup (800hz to avoid audible PWM noise and visible light flickering)
+  ledcSetup(0, 800, 8);
   ledcAttachPin(mosfetPin, 0);
   ledcWrite(0, 255);
 }
@@ -61,18 +63,20 @@ void loop()
   previousSwitchState = currentSwitchState;
 
   //Reed switch edge detection to dim in  
-  if(reedState && (previousReedState == LOW))
+  if((previousReedState == LOW) && reedState)
   {
+    lightOnTime = millis();
     for(int i = 0; i <= lastDuty; i++)
     {
       ledcWrite(0, i);
       delay(10);
     }
     previousReedState = HIGH;
+    timedOut = false;
   }
 
   //Reed switch edge detection to dim out
-  if(!reedState && (previousReedState == HIGH))
+  if((previousReedState == HIGH) && !reedState)
   {
     for(int i = lastDuty; i >= 0; i--)
     {
@@ -80,5 +84,19 @@ void loop()
       delay(10); 
     }
     previousReedState = LOW;
+  }
+
+  //Timeout logic (10min)
+  if(reedState && (timedOut == false))
+  {
+    if((millis() - lightOnTime) >= 600000)
+    {
+      for(int i = lastDuty; i >= 0; i--)
+      {
+        ledcWrite(0, i);
+        delay(10); 
+      }
+      timedOut = true;
+    }
   }
 }
